@@ -14,10 +14,20 @@ import yaml
 
 def workflows(prefix="", filter_branch=None, upload=False, indentation=6):
     w = []
-    # add "wheel" here for pypi
     for btype in ["conda"]:
         for python_version in ["3.6", "3.7", "3.8"]:
             for cu_version in ["cu92", "cu100", "cu101"]:
+                w += workflow_pair(
+                    btype=btype,
+                    python_version=python_version,
+                    cu_version=cu_version,
+                    prefix=prefix,
+                    upload=upload,
+                    filter_branch=filter_branch,
+                )
+    for btype in ["wheel"]:
+        for python_version in ["3.6", "3.7", "3.8"]:
+            for cu_version in ["cpu"]:
                 w += workflow_pair(
                     btype=btype,
                     python_version=python_version,
@@ -112,7 +122,10 @@ def indent(indentation, data_list):
 if __name__ == "__main__":
     d = os.path.dirname(__file__)
     env = jinja2.Environment(
-        loader=jinja2.FileSystemLoader(d), lstrip_blocks=True, autoescape=False
+        loader=jinja2.FileSystemLoader(d),
+        lstrip_blocks=True,
+        autoescape=False,
+        keep_trailing_newline=True,
     )
 
     with open(os.path.join(d, "config.yml"), "w") as f:

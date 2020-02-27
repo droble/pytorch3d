@@ -42,7 +42,7 @@ conda install jupyter
 pip install scikit-image matplotlib imageio
 
 # Tests/Linting
-pip install black isort flake8
+pip install black isort flake8 flake8-bugbear flake8-comprehensions
 ```
 
 ## Build/Install Pytorch3d
@@ -53,6 +53,12 @@ After installing the above dependencies, run one of the following commands:
 ```
 # Anaconda Cloud
 conda install pytorch3d -c pytorch3d
+```
+
+Or, to install a nightly (non-official, alpha) build:
+```
+# Anaconda Cloud
+conda install pytorch3d -c pytorch3d-nightly
 ```
 
 ### 2. Install from GitHub

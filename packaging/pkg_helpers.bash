@@ -113,7 +113,7 @@ setup_build_version() {
 # Set some useful variables for OS X, if applicable
 setup_macos() {
   if [[ "$(uname)" == Darwin ]]; then
-    export MACOSX_DEPLOYMENT_TARGET=10.14 CC=clang CXX=clang++
+    export MACOSX_DEPLOYMENT_TARGET=10.9 CC=clang CXX=clang++
   fi
 }
 
@@ -260,6 +260,6 @@ setup_visual_studio_constraint() {
       export VSDEVCMD_ARGS=''
       # shellcheck disable=SC2086
       conda build $CONDA_CHANNEL_FLAGS --no-anaconda-upload packaging/$VSTOOLCHAIN_PACKAGE
-      cp packaging/$VSTOOLCHAIN_PACKAGE/conda_build_config.yaml packaging/torchvision/conda_build_config.yaml
+      cp packaging/$VSTOOLCHAIN_PACKAGE/conda_build_config.yaml packaging/pytorch3d/conda_build_config.yaml
   fi
 }
