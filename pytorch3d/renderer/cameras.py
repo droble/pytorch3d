@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright (c) Facebook, Inc. and its affiliates. All rights reserved.
 
 import math
@@ -905,7 +904,7 @@ def get_world_to_view_transform(R=r, T=t) -> Transform3d:
         raise ValueError(msg % repr(T.shape))
     if R.dim() != 3 or R.shape[1:] != (3, 3):
         msg = "Expected R to have shape (N, 3, 3); got %r"
-        raise ValueError(msg % R.shape)
+        raise ValueError(msg % repr(R.shape))
 
     # Create a Transform3d object
     T = Translate(T, device=T.device)
@@ -944,7 +943,7 @@ def camera_position_from_spherical_angles(
         azim = math.pi / 180.0 * azim
     x = dist * torch.cos(elev) * torch.sin(azim)
     y = dist * torch.sin(elev)
-    z = -dist * torch.cos(elev) * torch.cos(azim)
+    z = dist * torch.cos(elev) * torch.cos(azim)
     camera_position = torch.stack([x, y, z], dim=1)
     if camera_position.dim() == 0:
         camera_position = camera_position.view(1, -1)  # add batch dim.

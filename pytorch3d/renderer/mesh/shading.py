@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright (c) Facebook, Inc. and its affiliates. All rights reserved.
 
 
@@ -70,8 +69,12 @@ def phong_shading(
     vertex_normals = meshes.verts_normals_packed()  # (V, 3)
     faces_verts = verts[faces]
     faces_normals = vertex_normals[faces]
-    pixel_coords = interpolate_face_attributes(fragments, faces_verts)
-    pixel_normals = interpolate_face_attributes(fragments, faces_normals)
+    pixel_coords = interpolate_face_attributes(
+        fragments.pix_to_face, fragments.bary_coords, faces_verts
+    )
+    pixel_normals = interpolate_face_attributes(
+        fragments.pix_to_face, fragments.bary_coords, faces_normals
+    )
     ambient, diffuse, specular = _apply_lighting(
         pixel_coords, pixel_normals, lights, cameras, materials
     )
@@ -122,7 +125,9 @@ def gouraud_shading(
     )
     verts_colors_shaded = vertex_colors * (ambient + diffuse) + specular
     face_colors = verts_colors_shaded[faces]
-    colors = interpolate_face_attributes(fragments, face_colors)
+    colors = interpolate_face_attributes(
+        fragments.pix_to_face, fragments.bary_coords, face_colors
+    )
     return colors
 
 

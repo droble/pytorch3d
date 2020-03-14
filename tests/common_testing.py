@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright (c) Facebook, Inc. and its affiliates. All rights reserved.
 
 
@@ -13,6 +12,14 @@ class TestCaseMixin(unittest.TestCase):
         Verify that tensor1 and tensor2 have their data in distinct locations.
         """
         self.assertNotEqual(
+            tensor1.storage().data_ptr(), tensor2.storage().data_ptr()
+        )
+
+    def assertNotSeparate(self, tensor1, tensor2) -> None:
+        """
+        Verify that tensor1 and tensor2 have their data in the same locations.
+        """
+        self.assertEqual(
             tensor1.storage().data_ptr(), tensor2.storage().data_ptr()
         )
 

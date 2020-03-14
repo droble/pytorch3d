@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright (c) Facebook, Inc. and its affiliates. All rights reserved.
 
 
@@ -8,7 +7,6 @@ import torch.nn.functional as F
 
 from pytorch3d.renderer.mesh.rasterizer import Fragments
 from pytorch3d.renderer.mesh.texturing import (
-    _clip_barycentric_coordinates,
     interpolate_face_attributes,
     interpolate_texture_map,
     interpolate_vertex_colors,
@@ -94,7 +92,9 @@ class TestTexturing(TestCaseMixin, unittest.TestCase):
             dists=pix_to_face,
         )
         with self.assertRaises(ValueError):
-            interpolate_face_attributes(fragments, face_attributes)
+            interpolate_face_attributes(
+                fragments.pix_to_face, fragments.bary_coords, face_attributes
+            )
 
         # 2. pix_to_face must have shape (N, H, W, K)
         pix_to_face = torch.ones((1, 1, 1, 1, 3))
@@ -105,7 +105,9 @@ class TestTexturing(TestCaseMixin, unittest.TestCase):
             dists=pix_to_face,
         )
         with self.assertRaises(ValueError):
-            interpolate_face_attributes(fragments, face_attributes)
+            interpolate_face_attributes(
+                fragments.pix_to_face, fragments.bary_coords, face_attributes
+            )
 
     def test_interpolate_texture_map(self):
         barycentric_coords = torch.tensor(
@@ -164,6 +166,55 @@ class TestTexturing(TestCaseMixin, unittest.TestCase):
         self.assertSeparate(tex._verts_uvs_padded, tex_cloned._verts_uvs_padded)
         self.assertSeparate(tex._maps_padded, tex_cloned._maps_padded)
 
+    def test_getitem(self):
+        N = 5
+        V = 20
+        source = {
+            "maps": torch.rand(size=(N, 16, 16, 3)),
+            "faces_uvs": torch.randint(size=(N, 10, 3), low=0, high=V),
+            "verts_uvs": torch.rand((N, V, 2)),
+        }
+        tex = Textures(
+            maps=source["maps"],
+            faces_uvs=source["faces_uvs"],
+            verts_uvs=source["verts_uvs"],
+        )
+
+        verts = torch.rand(size=(N, V, 3))
+        faces = torch.randint(size=(N, 10, 3), high=V)
+        meshes = Meshes(verts=verts, faces=faces, textures=tex)
+
+        def tryindex(index):
+            tex2 = tex[index]
+            meshes2 = meshes[index]
+            tex_from_meshes = meshes2.textures
+            for item in source:
+                basic = source[item][index]
+                from_texture = getattr(tex2, item + "_padded")()
+                from_meshes = getattr(tex_from_meshes, item + "_padded")()
+                if isinstance(index, int):
+                    basic = basic[None]
+                self.assertClose(basic, from_texture)
+                self.assertClose(basic, from_meshes)
+                self.assertEqual(
+                    from_texture.ndim, getattr(tex, item + "_padded")().ndim
+                )
+                if item == "faces_uvs":
+                    faces_uvs_list = tex_from_meshes.faces_uvs_list()
+                    self.assertEqual(basic.shape[0], len(faces_uvs_list))
+                    for i, faces_uvs in enumerate(faces_uvs_list):
+                        self.assertClose(faces_uvs, basic[i])
+
+        tryindex(2)
+        tryindex(slice(0, 2, 1))
+        index = torch.tensor([1, 0, 1, 0, 0], dtype=torch.bool)
+        tryindex(index)
+        index = torch.tensor([0, 0, 0, 0, 0], dtype=torch.bool)
+        tryindex(index)
+        index = torch.tensor([1, 2], dtype=torch.int64)
+        tryindex(index)
+        tryindex([2, 4])
+
     def test_to(self):
         V = 20
         tex = Textures(
@@ -220,13 +271,3 @@ class TestTexturing(TestCaseMixin, unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             tex_mesh.extend(N=-1)
-
-    def test_clip_barycentric_coords(self):
-        barycentric_coords = torch.tensor(
-            [[1.5, -0.3, -0.2], [1.2, 0.3, -0.5]], dtype=torch.float32
-        )
-        expected_out = torch.tensor(
-            [[1.0, 0.0, 0.0], [1.0 / 1.3, 0.3 / 1.3, 0.0]], dtype=torch.float32
-        )
-        clipped = _clip_barycentric_coordinates(barycentric_coords)
-        self.assertTrue(torch.allclose(clipped, expected_out))

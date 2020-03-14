@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright (c) Facebook, Inc. and its affiliates. All rights reserved.
 
 from typing import List, Optional, Union
@@ -103,7 +102,7 @@ class Textures(object):
             raise ValueError(msg % repr(faces_uvs.shape))
         if verts_rgb is not None and verts_rgb.ndim != 3:
             msg = "Expected verts_rgb to be of shape (N, V, 3); got %r"
-            raise ValueError(msg % verts_rgb.shape)
+            raise ValueError(msg % repr(verts_rgb.shape))
         if maps is not None:
             if torch.is_tensor(maps) and maps.ndim != 4:
                 msg = "Expected maps to be of shape (N, H, W, 3); got %r"
@@ -115,8 +114,14 @@ class Textures(object):
         self._verts_rgb_padded = verts_rgb
         self._maps_padded = maps
         self._num_faces_per_mesh = None
+        self._set_num_faces_per_mesh()
 
+    def _set_num_faces_per_mesh(self) -> None:
+        """
+        Determines and sets the number of textured faces for each mesh.
+        """
         if self._faces_uvs_padded is not None:
+            faces_uvs = self._faces_uvs_padded
             self._num_faces_per_mesh = faces_uvs.gt(-1).all(-1).sum(-1).tolist()
 
     def clone(self):
@@ -133,6 +138,18 @@ class Textures(object):
             if torch.is_tensor(v) and v.device != device:
                 setattr(self, k, v.to(device))
         return self
+
+    def __getitem__(self, index):
+        other = Textures()
+        for key in dir(self):
+            value = getattr(self, key)
+            if torch.is_tensor(value):
+                if isinstance(index, int):
+                    setattr(other, key, value[index][None])
+                else:
+                    setattr(other, key, value[index])
+        other._set_num_faces_per_mesh()
+        return other
 
     def faces_uvs_padded(self) -> torch.Tensor:
         return self._faces_uvs_padded

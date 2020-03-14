@@ -80,7 +80,6 @@ def generate_base_workflow(
         "name": base_workflow_name,
         "python_version": python_version,
         "cu_version": cu_version,
-        "build_version": "0.1.0",
         "pytorch_version": "1.4",
     }
 
