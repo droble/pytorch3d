@@ -1,13 +1,14 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All rights reserved.
 
 import unittest
+
 import torch
 import torch.nn.functional as F
-
+from common_testing import TestCaseMixin
 from pytorch3d.loss import chamfer_distance
 
 
-class TestChamfer(unittest.TestCase):
+class TestChamfer(TestCaseMixin, unittest.TestCase):
     @staticmethod
     def init_pointclouds(batch_size: int = 10, P1: int = 32, P2: int = 64):
         """
@@ -17,14 +18,10 @@ class TestChamfer(unittest.TestCase):
         """
         device = torch.device("cuda:0")
         p1 = torch.rand((batch_size, P1, 3), dtype=torch.float32, device=device)
-        p1_normals = torch.rand(
-            (batch_size, P1, 3), dtype=torch.float32, device=device
-        )
+        p1_normals = torch.rand((batch_size, P1, 3), dtype=torch.float32, device=device)
         p1_normals = p1_normals / p1_normals.norm(dim=2, p=2, keepdim=True)
         p2 = torch.rand((batch_size, P2, 3), dtype=torch.float32, device=device)
-        p2_normals = torch.rand(
-            (batch_size, P2, 3), dtype=torch.float32, device=device
-        )
+        p2_normals = torch.rand((batch_size, P2, 3), dtype=torch.float32, device=device)
         p2_normals = p2_normals / p2_normals.norm(dim=2, p=2, keepdim=True)
         weights = torch.rand((batch_size,), dtype=torch.float32, device=device)
 
@@ -45,9 +42,7 @@ class TestChamfer(unittest.TestCase):
         for n in range(N):
             for i1 in range(P1):
                 for i2 in range(P2):
-                    dist[n, i1, i2] = torch.sum(
-                        (p1[n, i1, :] - p2[n, i2, :]) ** 2
-                    )
+                    dist[n, i1, i2] = torch.sum((p1[n, i1, :] - p2[n, i2, :]) ** 2)
 
         loss = [
             torch.min(dist, dim=2)[0],  # (N, P1)
@@ -85,7 +80,7 @@ class TestChamfer(unittest.TestCase):
         pred_loss = pred_loss[0].sum(1) / P1 + pred_loss[1].sum(1) / P2
         pred_loss *= weights
         pred_loss = pred_loss.sum() / weights.sum()
-        self.assertTrue(torch.allclose(loss, pred_loss))
+        self.assertClose(loss, pred_loss)
         self.assertTrue(loss_norm is None)
 
     def test_chamfer_point_reduction(self):
@@ -115,13 +110,13 @@ class TestChamfer(unittest.TestCase):
         )
         pred_loss_mean = pred_loss[0].sum(1) / P1 + pred_loss[1].sum(1) / P2
         pred_loss_mean *= weights
-        self.assertTrue(torch.allclose(loss, pred_loss_mean))
+        self.assertClose(loss, pred_loss_mean)
 
         pred_loss_norm_mean = (
             pred_loss_norm[0].sum(1) / P1 + pred_loss_norm[1].sum(1) / P2
         )
         pred_loss_norm_mean *= weights
-        self.assertTrue(torch.allclose(loss_norm, pred_loss_norm_mean))
+        self.assertClose(loss_norm, pred_loss_norm_mean)
 
         # point_reduction = "sum".
         loss, loss_norm = chamfer_distance(
@@ -135,20 +130,16 @@ class TestChamfer(unittest.TestCase):
         )
         pred_loss_sum = pred_loss[0].sum(1) + pred_loss[1].sum(1)
         pred_loss_sum *= weights
-        self.assertTrue(torch.allclose(loss, pred_loss_sum))
+        self.assertClose(loss, pred_loss_sum)
 
         pred_loss_norm_sum = pred_loss_norm[0].sum(1) + pred_loss_norm[1].sum(1)
         pred_loss_norm_sum *= weights
-        self.assertTrue(torch.allclose(loss_norm, pred_loss_norm_sum))
+        self.assertClose(loss_norm, pred_loss_norm_sum)
 
         # Error when point_reduction = "none" and batch_reduction = "none".
         with self.assertRaises(ValueError):
             chamfer_distance(
-                p1,
-                p2,
-                weights=weights,
-                batch_reduction="none",
-                point_reduction="none",
+                p1, p2, weights=weights, batch_reduction="none", point_reduction="none"
             )
 
         # Error when batch_reduction is not in ["none", "mean", "sum"].
@@ -182,12 +173,12 @@ class TestChamfer(unittest.TestCase):
         pred_loss[0] *= weights.view(N, 1)
         pred_loss[1] *= weights.view(N, 1)
         pred_loss = pred_loss[0].sum() + pred_loss[1].sum()
-        self.assertTrue(torch.allclose(loss, pred_loss))
+        self.assertClose(loss, pred_loss)
 
         pred_loss_norm[0] *= weights.view(N, 1)
         pred_loss_norm[1] *= weights.view(N, 1)
         pred_loss_norm = pred_loss_norm[0].sum() + pred_loss_norm[1].sum()
-        self.assertTrue(torch.allclose(loss_norm, pred_loss_norm))
+        self.assertClose(loss_norm, pred_loss_norm)
 
         # batch_reduction = "mean".
         loss, loss_norm = chamfer_distance(
@@ -201,10 +192,10 @@ class TestChamfer(unittest.TestCase):
         )
 
         pred_loss /= weights.sum()
-        self.assertTrue(torch.allclose(loss, pred_loss))
+        self.assertClose(loss, pred_loss)
 
         pred_loss_norm /= weights.sum()
-        self.assertTrue(torch.allclose(loss_norm, pred_loss_norm))
+        self.assertClose(loss_norm, pred_loss_norm)
 
         # Error when point_reduction is not in ["none", "mean", "sum"].
         with self.assertRaises(ValueError):
@@ -239,7 +230,7 @@ class TestChamfer(unittest.TestCase):
         pred_loss[1] *= weights.view(N, 1)
         pred_loss_sum = pred_loss[0].sum(1) + pred_loss[1].sum(1)  # point sum
         pred_loss_sum = pred_loss_sum.sum()  # batch sum
-        self.assertTrue(torch.allclose(loss, pred_loss_sum))
+        self.assertClose(loss, pred_loss_sum)
 
         pred_loss_norm[0] *= weights.view(N, 1)
         pred_loss_norm[1] *= weights.view(N, 1)
@@ -247,7 +238,7 @@ class TestChamfer(unittest.TestCase):
             1
         )  # point sum.
         pred_loss_norm_sum = pred_loss_norm_sum.sum()  # batch sum
-        self.assertTrue(torch.allclose(loss_norm, pred_loss_norm_sum))
+        self.assertClose(loss_norm, pred_loss_norm_sum)
 
         # batch_reduction = "mean", point_reduction = "sum".
         loss, loss_norm = chamfer_distance(
@@ -260,10 +251,10 @@ class TestChamfer(unittest.TestCase):
             point_reduction="sum",
         )
         pred_loss_sum /= weights.sum()
-        self.assertTrue(torch.allclose(loss, pred_loss_sum))
+        self.assertClose(loss, pred_loss_sum)
 
         pred_loss_norm_sum /= weights.sum()
-        self.assertTrue(torch.allclose(loss_norm, pred_loss_norm_sum))
+        self.assertClose(loss_norm, pred_loss_norm_sum)
 
         # batch_reduction = "sum", point_reduction = "mean".
         loss, loss_norm = chamfer_distance(
@@ -277,13 +268,13 @@ class TestChamfer(unittest.TestCase):
         )
         pred_loss_mean = pred_loss[0].sum(1) / P1 + pred_loss[1].sum(1) / P2
         pred_loss_mean = pred_loss_mean.sum()
-        self.assertTrue(torch.allclose(loss, pred_loss_mean))
+        self.assertClose(loss, pred_loss_mean)
 
         pred_loss_norm_mean = (
             pred_loss_norm[0].sum(1) / P1 + pred_loss_norm[1].sum(1) / P2
         )
         pred_loss_norm_mean = pred_loss_norm_mean.sum()
-        self.assertTrue(torch.allclose(loss_norm, pred_loss_norm_mean))
+        self.assertClose(loss_norm, pred_loss_norm_mean)
 
         # batch_reduction = "mean", point_reduction = "mean". This is the default.
         loss, loss_norm = chamfer_distance(
@@ -296,10 +287,10 @@ class TestChamfer(unittest.TestCase):
             point_reduction="mean",
         )
         pred_loss_mean /= weights.sum()
-        self.assertTrue(torch.allclose(loss, pred_loss_mean))
+        self.assertClose(loss, pred_loss_mean)
 
         pred_loss_norm_mean /= weights.sum()
-        self.assertTrue(torch.allclose(loss_norm, pred_loss_norm_mean))
+        self.assertClose(loss_norm, pred_loss_norm_mean)
 
     def test_incorrect_weights(self):
         N, P1, P2 = 16, 64, 128
@@ -315,17 +306,17 @@ class TestChamfer(unittest.TestCase):
         loss, loss_norm = chamfer_distance(
             p1, p2, weights=weights, batch_reduction="mean"
         )
-        self.assertTrue(torch.allclose(loss.cpu(), torch.zeros((1,))))
+        self.assertClose(loss.cpu(), torch.zeros(()))
         self.assertTrue(loss.requires_grad)
-        self.assertTrue(torch.allclose(loss_norm.cpu(), torch.zeros((1,))))
+        self.assertClose(loss_norm.cpu(), torch.zeros(()))
         self.assertTrue(loss_norm.requires_grad)
 
         loss, loss_norm = chamfer_distance(
             p1, p2, weights=weights, batch_reduction="none"
         )
-        self.assertTrue(torch.allclose(loss.cpu(), torch.zeros((N,))))
+        self.assertClose(loss.cpu(), torch.zeros((N, N)))
         self.assertTrue(loss.requires_grad)
-        self.assertTrue(torch.allclose(loss_norm.cpu(), torch.zeros((N,))))
+        self.assertClose(loss_norm.cpu(), torch.zeros((N, N)))
         self.assertTrue(loss_norm.requires_grad)
 
         weights = torch.ones((N,), dtype=torch.float32, device=device) * -1
@@ -337,9 +328,7 @@ class TestChamfer(unittest.TestCase):
             loss, loss_norm = chamfer_distance(p1, p2, weights=weights)
 
     @staticmethod
-    def chamfer_with_init(
-        batch_size: int, P1: int, P2: int, return_normals: bool
-    ):
+    def chamfer_with_init(batch_size: int, P1: int, P2: int, return_normals: bool):
         p1, p2, p1_normals, p2_normals, weights = TestChamfer.init_pointclouds(
             batch_size, P1, P2
         )

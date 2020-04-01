@@ -1,6 +1,6 @@
 This website was created with [Docusaurus](https://docusaurus.io/).
 
-# Building the PyTorch3d website
+# Building the PyTorch3D website
 
 ## Install 
 
@@ -58,6 +58,15 @@ This will build the docusaurus website and run a script to parse the tutorials a
 
 
 TODO: Add support for latex in markdown in jupyter notebooks and embedded images. 
+
+## Build and publish the website
+
+The following script will build the tutorials and the website and push to the gh-pages 
+branch of `github.com/facebookresearch/pytorch3d`.
+
+```
+bash scripts/publish_website.sh
+```
 
 
 ## Add a new tutorial

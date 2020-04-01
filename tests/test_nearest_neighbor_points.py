@@ -1,8 +1,8 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All rights reserved.
 
 import unittest
-import torch
 
+import torch
 from pytorch3d import _C
 
 
@@ -32,9 +32,7 @@ class TestNearestNeighborPoints(unittest.TestCase):
                         # to the cpp or cuda versions of the function
                         # depending on the input type.
                         idx1 = _C.nn_points_idx(x, y)
-                        idx2 = TestNearestNeighborPoints.nn_points_idx_naive(
-                            x, y
-                        )
+                        idx2 = TestNearestNeighborPoints.nn_points_idx_naive(x, y)
                         self.assertTrue(idx1.size(1) == P1)
                         self.assertTrue(torch.all(idx1 == idx2))
 

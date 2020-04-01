@@ -3,12 +3,11 @@
 import struct
 import unittest
 from io import BytesIO, StringIO
-import torch
 
+import torch
+from common_testing import TestCaseMixin
 from pytorch3d.io.ply_io import _load_ply_raw, load_ply, save_ply
 from pytorch3d.utils import torus
-
-from common_testing import TestCaseMixin
 
 
 class TestMeshPlyIO(TestCaseMixin, unittest.TestCase):
@@ -140,6 +139,90 @@ class TestMeshPlyIO(TestCaseMixin, unittest.TestCase):
             ]
             self.assertClose(faces, torch.LongTensor(faces_expected))
 
+    def test_save_ply_invalid_shapes(self):
+        # Invalid vertices shape
+        with self.assertRaises(ValueError) as error:
+            verts = torch.FloatTensor([[0.1, 0.2, 0.3, 0.4]])  # (V, 4)
+            faces = torch.LongTensor([[0, 1, 2]])
+            save_ply(StringIO(), verts, faces)
+        expected_message = (
+            "Argument 'verts' should either be empty or of shape (num_verts, 3)."
+        )
+        self.assertTrue(expected_message, error.exception)
+
+        # Invalid faces shape
+        with self.assertRaises(ValueError) as error:
+            verts = torch.FloatTensor([[0.1, 0.2, 0.3]])
+            faces = torch.LongTensor([[0, 1, 2, 3]])  # (F, 4)
+            save_ply(StringIO(), verts, faces)
+        expected_message = (
+            "Argument 'faces' should either be empty or of shape (num_faces, 3)."
+        )
+        self.assertTrue(expected_message, error.exception)
+
+    def test_save_ply_invalid_indices(self):
+        message_regex = "Faces have invalid indices"
+        verts = torch.FloatTensor([[0.1, 0.2, 0.3]])
+        faces = torch.LongTensor([[0, 1, 2]])
+        with self.assertWarnsRegex(UserWarning, message_regex):
+            save_ply(StringIO(), verts, faces)
+
+        faces = torch.LongTensor([[-1, 0, 1]])
+        with self.assertWarnsRegex(UserWarning, message_regex):
+            save_ply(StringIO(), verts, faces)
+
+    def _test_save_load(self, verts, faces):
+        f = StringIO()
+        save_ply(f, verts, faces)
+        f.seek(0)
+        # raise Exception(f.getvalue())
+        expected_verts, expected_faces = verts, faces
+        if not len(expected_verts):  # Always compare with a (V, 3) tensor
+            expected_verts = torch.zeros(size=(0, 3), dtype=torch.float32)
+        if not len(expected_faces):  # Always compare with an (F, 3) tensor
+            expected_faces = torch.zeros(size=(0, 3), dtype=torch.int64)
+        actual_verts, actual_faces = load_ply(f)
+        self.assertClose(expected_verts, actual_verts)
+        self.assertClose(expected_faces, actual_faces)
+
+    def test_empty_save_load(self):
+        # Vertices + empty faces
+        verts = torch.tensor([[0.1, 0.2, 0.3]])
+        faces = torch.LongTensor([])
+        self._test_save_load(verts, faces)
+
+        faces = torch.zeros(size=(0, 3), dtype=torch.int64)
+        self._test_save_load(verts, faces)
+
+        # Faces + empty vertices
+        message_regex = "Faces have invalid indices"
+        verts = torch.FloatTensor([])
+        faces = torch.LongTensor([[0, 1, 2]])
+        with self.assertWarnsRegex(UserWarning, message_regex):
+            self._test_save_load(verts, faces)
+
+        verts = torch.zeros(size=(0, 3), dtype=torch.float32)
+        with self.assertWarnsRegex(UserWarning, message_regex):
+            self._test_save_load(verts, faces)
+
+        # Empty vertices + empty faces
+        message_regex = "Empty 'verts' and 'faces' arguments provided"
+        verts0 = torch.FloatTensor([])
+        faces0 = torch.LongTensor([])
+        with self.assertWarnsRegex(UserWarning, message_regex):
+            self._test_save_load(verts0, faces0)
+
+        faces3 = torch.zeros(size=(0, 3), dtype=torch.int64)
+        with self.assertWarnsRegex(UserWarning, message_regex):
+            self._test_save_load(verts0, faces3)
+
+        verts3 = torch.zeros(size=(0, 3), dtype=torch.float32)
+        with self.assertWarnsRegex(UserWarning, message_regex):
+            self._test_save_load(verts3, faces0)
+
+        with self.assertWarnsRegex(UserWarning, message_regex):
+            self._test_save_load(verts3, faces3)
+
     def test_simple_save(self):
         verts = torch.tensor(
             [[0, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0]], dtype=torch.float32
@@ -155,14 +238,7 @@ class TestMeshPlyIO(TestCaseMixin, unittest.TestCase):
     def test_load_simple_binary(self):
         for big_endian in [True, False]:
             verts = (
-                "0 0 0 "
-                "0 0 1 "
-                "0 1 1 "
-                "0 1 0 "
-                "1 0 0 "
-                "1 0 1 "
-                "1 1 1 "
-                "1 1 0"
+                "0 0 0 " "0 0 1 " "0 1 1 " "0 1 0 " "1 0 0 " "1 0 1 " "1 1 1 " "1 1 0"
             ).split()
             faces = (
                 "4 0 1 2 3 "
@@ -176,9 +252,7 @@ class TestMeshPlyIO(TestCaseMixin, unittest.TestCase):
                 "3 4 5 1"
             ).split()
             short_one = b"\00\01" if big_endian else b"\01\00"
-            mixed_data = b"\00\00" b"\03\03" + (
-                short_one + b"\00\01\01\01" b"\00\02"
-            )
+            mixed_data = b"\00\00" b"\03\03" + (short_one + b"\00\01\01\01" b"\00\02")
             minus_one_data = b"\xff" * 14
             endian_char = ">" if big_endian else "<"
             format = (
@@ -306,9 +380,7 @@ class TestMeshPlyIO(TestCaseMixin, unittest.TestCase):
 
         lines2 = lines.copy()
         lines2[8] = "1 2"
-        with self.assertRaisesRegex(
-            ValueError, "Inconsistent data for vertex."
-        ):
+        with self.assertRaisesRegex(ValueError, "Inconsistent data for vertex."):
             _load_ply_raw(StringIO("\n".join(lines2)))
 
         lines2 = lines[:-1]
@@ -344,9 +416,7 @@ class TestMeshPlyIO(TestCaseMixin, unittest.TestCase):
 
         lines2 = lines.copy()
         lines2.insert(4, "element bad 1")
-        with self.assertRaisesRegex(
-            ValueError, "Found an element with no properties."
-        ):
+        with self.assertRaisesRegex(ValueError, "Found an element with no properties."):
             _load_ply_raw(StringIO("\n".join(lines2)))
 
         lines2 = lines.copy()
@@ -369,25 +439,19 @@ class TestMeshPlyIO(TestCaseMixin, unittest.TestCase):
         lines2 = lines.copy()
         lines2.insert(4, "property double y")
 
-        with self.assertRaisesRegex(
-            ValueError, "Too little data for an element."
-        ):
+        with self.assertRaisesRegex(ValueError, "Too little data for an element."):
             _load_ply_raw(StringIO("\n".join(lines2)))
 
         lines2[-2] = "3.3 4.2"
         _load_ply_raw(StringIO("\n".join(lines2)))
 
         lines2[-2] = "3.3 4.3 2"
-        with self.assertRaisesRegex(
-            ValueError, "Too much data for an element."
-        ):
+        with self.assertRaisesRegex(ValueError, "Too much data for an element."):
             _load_ply_raw(StringIO("\n".join(lines2)))
 
         # Now make the ply file actually be readable as a Mesh
 
-        with self.assertRaisesRegex(
-            ValueError, "The ply file has no face element."
-        ):
+        with self.assertRaisesRegex(ValueError, "The ply file has no face element."):
             load_ply(StringIO("\n".join(lines)))
 
         lines2 = lines.copy()
@@ -398,9 +462,12 @@ class TestMeshPlyIO(TestCaseMixin, unittest.TestCase):
         lines2.insert(5, "property float z")
         lines2.insert(5, "property float y")
         lines2[-2] = "0 0 0"
-        with self.assertRaisesRegex(
-            ValueError, "Faces must have at least 3 vertices."
-        ):
+        lines2[-1] = ""
+        with self.assertRaisesRegex(ValueError, "Not enough data for face."):
+            load_ply(StringIO("\n".join(lines2)))
+
+        lines2[-1] = "2 0 0"
+        with self.assertRaisesRegex(ValueError, "Faces must have at least 3 vertices."):
             load_ply(StringIO("\n".join(lines2)))
 
         # Good one
@@ -408,17 +475,11 @@ class TestMeshPlyIO(TestCaseMixin, unittest.TestCase):
         load_ply(StringIO("\n".join(lines2)))
 
     @staticmethod
-    def _bm_save_ply(
-        verts: torch.Tensor, faces: torch.Tensor, decimal_places: int
-    ):
-        return lambda: save_ply(
-            StringIO(), verts, faces, decimal_places=decimal_places
-        )
+    def _bm_save_ply(verts: torch.Tensor, faces: torch.Tensor, decimal_places: int):
+        return lambda: save_ply(StringIO(), verts, faces, decimal_places=decimal_places)
 
     @staticmethod
-    def _bm_load_ply(
-        verts: torch.Tensor, faces: torch.Tensor, decimal_places: int
-    ):
+    def _bm_load_ply(verts: torch.Tensor, faces: torch.Tensor, decimal_places: int):
         f = StringIO()
         save_ply(f, verts, faces, decimal_places)
         s = f.getvalue()

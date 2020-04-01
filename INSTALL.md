@@ -5,7 +5,7 @@
 
 ### Core library
 
-The core library is written in PyTorch. Several components have underlying implementation in CUDA for improved performance. A subset of these components have CPU implementations in C++/Pytorch. It is advised to use PyTorch3d with GPU support in order to use all the features.
+The core library is written in PyTorch. Several components have underlying implementation in CUDA for improved performance. A subset of these components have CPU implementations in C++/Pytorch. It is advised to use PyTorch3D with GPU support in order to use all the features.
 
 - Linux or macOS or Windows
 - Python ≥ 3.6
@@ -17,7 +17,7 @@ The core library is written in PyTorch. Several components have underlying imple
 
 These can be installed by running:
 ```
-conda create -n pytorch3d python=3.6
+conda create -n pytorch3d python=3.8
 conda activate pytorch3d
 conda install -c pytorch pytorch torchvision cudatoolkit=10.0
 conda install -c conda-forge -c fvcore fvcore
@@ -25,7 +25,7 @@ conda install -c conda-forge -c fvcore fvcore
 
 ### Tests/Linting and Demos
 
-For developing on top of PyTorch3d or contributing, you will need to run the linter and tests. If you want to run any of the notebook tutorials as `docs/tutorials` you will also need matplotlib.
+For developing on top of PyTorch3D or contributing, you will need to run the linter and tests. If you want to run any of the notebook tutorials as `docs/tutorials` you will also need matplotlib.
 - scikit-image
 - black
 - isort
@@ -45,7 +45,7 @@ pip install scikit-image matplotlib imageio
 pip install black isort flake8 flake8-bugbear flake8-comprehensions
 ```
 
-## Installing prebuilt binaries for Pytorch3d
+## Installing prebuilt binaries for PyTorch3D
 After installing the above dependencies, run one of the following commands:
 
 ### 1. Install with CUDA support from Anaconda Cloud, on Linux only

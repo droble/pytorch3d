@@ -2,17 +2,28 @@
 
 
 """This module implements utility functions for loading and saving meshes."""
-import numpy as np
 import os
 import pathlib
 import warnings
 from collections import namedtuple
 from typing import List, Optional
+
+import numpy as np
 import torch
 from fvcore.common.file_io import PathManager
 from PIL import Image
+from pytorch3d.structures import Meshes, Textures, join_meshes_as_batch
 
-from pytorch3d.structures import Meshes, Textures, join_meshes
+
+def _make_tensor(data, cols: int, dtype: torch.dtype) -> torch.Tensor:
+    """
+    Return a 2D tensor with the specified cols and dtype filled with data,
+    even when data is empty.
+    """
+    if not data:
+        return torch.zeros((0, cols), dtype=dtype)
+
+    return torch.tensor(data, dtype=dtype)
 
 
 def _read_image(file_name: str, format=None):
@@ -40,9 +51,7 @@ def _read_image(file_name: str, format=None):
 
 # Faces & Aux type returned from load_obj function.
 _Faces = namedtuple("Faces", "verts_idx normals_idx textures_idx materials_idx")
-_Aux = namedtuple(
-    "Properties", "normals verts_uvs material_colors texture_images"
-)
+_Aux = namedtuple("Properties", "normals verts_uvs material_colors texture_images")
 
 
 def _format_faces_indices(faces_indices, max_index):
@@ -61,7 +70,7 @@ def _format_faces_indices(faces_indices, max_index):
     Raises:
         ValueError if indices are not in a valid range.
     """
-    faces_indices = torch.tensor(faces_indices, dtype=torch.int64)
+    faces_indices = _make_tensor(faces_indices, cols=3, dtype=torch.int64)
 
     # Change to 0 based indexing.
     faces_indices[(faces_indices > 0)] -= 1
@@ -70,10 +79,8 @@ def _format_faces_indices(faces_indices, max_index):
     faces_indices[(faces_indices < 0)] += max_index
 
     # Check indices are valid.
-    if not (
-        torch.all(faces_indices < max_index) and torch.all(faces_indices >= 0)
-    ):
-        raise ValueError("Faces have invalid indices.")
+    if torch.any(faces_indices >= max_index) or torch.any(faces_indices < 0):
+        warnings.warn("Faces have invalid indices")
 
     return faces_indices
 
@@ -238,13 +245,11 @@ def load_objs_as_meshes(files: list, device=None, load_textures: bool = True):
             image = list(tex_maps.values())[0].to(device)[None]
             tex = Textures(verts_uvs=verts_uvs, faces_uvs=faces_uvs, maps=image)
 
-        mesh = Meshes(
-            verts=[verts], faces=[faces.verts_idx.to(device)], textures=tex
-        )
+        mesh = Meshes(verts=[verts], faces=[faces.verts_idx.to(device)], textures=tex)
         mesh_list.append(mesh)
     if len(mesh_list) == 1:
         return mesh_list[0]
-    return join_meshes(mesh_list)
+    return join_meshes_as_batch(mesh_list)
 
 
 def _parse_face(
@@ -299,9 +304,7 @@ def _parse_face(
     # Subdivide faces with more than 3 vertices. See comments of the
     # load_obj function for more details.
     for i in range(len(face_verts) - 2):
-        faces_verts_idx.append(
-            (face_verts[0], face_verts[i + 1], face_verts[i + 2])
-        )
+        faces_verts_idx.append((face_verts[0], face_verts[i + 1], face_verts[i + 2]))
         if len(face_normals) > 0:
             faces_normals_idx.append(
                 (face_normals[0], face_normals[i + 1], face_normals[i + 2])
@@ -333,7 +336,7 @@ def _load(f_obj, data_dir, load_textures=True):
 
     # startswith expects each line to be a string. If the file is read in as
     # bytes then first decode to strings.
-    if isinstance(lines[0], bytes):
+    if lines and isinstance(lines[0], bytes):
         lines = [l.decode("utf-8") for l in lines]
 
     for line in lines:
@@ -358,8 +361,7 @@ def _load(f_obj, data_dir, load_textures=True):
             tx = [float(x) for x in line.split()[1:3]]
             if len(tx) != 2:
                 raise ValueError(
-                    "Texture %s does not have 2 values. Line: %s"
-                    % (str(tx), str(line))
+                    "Texture %s does not have 2 values. Line: %s" % (str(tx), str(line))
                 )
             verts_uvs.append(tx)
         elif line.startswith("vn "):
@@ -380,25 +382,21 @@ def _load(f_obj, data_dir, load_textures=True):
                 faces_materials_idx,
             )
 
-    verts = torch.tensor(verts)  # (V, 3)
-    normals = torch.tensor(normals)  # (N, 3)
-    verts_uvs = torch.tensor(verts_uvs)  # (T, 3)
+    verts = _make_tensor(verts, cols=3, dtype=torch.float32)  # (V, 3)
+    normals = _make_tensor(normals, cols=3, dtype=torch.float32)  # (N, 3)
+    verts_uvs = _make_tensor(verts_uvs, cols=2, dtype=torch.float32)  # (T, 2)
 
     faces_verts_idx = _format_faces_indices(faces_verts_idx, verts.shape[0])
 
     # Repeat for normals and textures if present.
     if len(faces_normals_idx) > 0:
-        faces_normals_idx = _format_faces_indices(
-            faces_normals_idx, normals.shape[0]
-        )
+        faces_normals_idx = _format_faces_indices(faces_normals_idx, normals.shape[0])
     if len(faces_textures_idx) > 0:
         faces_textures_idx = _format_faces_indices(
             faces_textures_idx, verts_uvs.shape[0]
         )
     if len(faces_materials_idx) > 0:
-        faces_materials_idx = torch.tensor(
-            faces_materials_idx, dtype=torch.int64
-        )
+        faces_materials_idx = torch.tensor(faces_materials_idx, dtype=torch.int64)
 
     # Load materials
     material_colors, texture_images = None, None
@@ -528,6 +526,14 @@ def save_obj(f, verts, faces, decimal_places: Optional[int] = None):
         faces: LongTensor of shape (F, 3) giving faces.
         decimal_places: Number of decimal places for saving.
     """
+    if len(verts) and not (verts.dim() == 2 and verts.size(1) == 3):
+        message = "Argument 'verts' should either be empty or of shape (num_verts, 3)."
+        raise ValueError(message)
+
+    if len(faces) and not (faces.dim() == 2 and faces.size(1) == 3):
+        message = "Argument 'faces' should either be empty or of shape (num_faces, 3)."
+        raise ValueError(message)
+
     new_f = False
     if isinstance(f, str):
         new_f = True
@@ -543,31 +549,40 @@ def save_obj(f, verts, faces, decimal_places: Optional[int] = None):
 
 
 # TODO (nikhilar) Speed up this function.
-def _save(f, verts, faces, decimal_places: Optional[int] = None):
-    if verts.dim() != 2 or verts.size(1) != 3:
-        raise ValueError("Argument 'verts' should be of shape (num_verts, 3).")
-    if faces.dim() != 2 or faces.size(1) != 3:
-        raise ValueError("Argument 'faces' should be of shape (num_faces, 3).")
+def _save(f, verts, faces, decimal_places: Optional[int] = None) -> None:
+    assert not len(verts) or (verts.dim() == 2 and verts.size(1) == 3)
+    assert not len(faces) or (faces.dim() == 2 and faces.size(1) == 3)
+
+    if not (len(verts) or len(faces)):
+        warnings.warn("Empty 'verts' and 'faces' arguments provided")
+        return
+
     verts, faces = verts.cpu(), faces.cpu()
 
-    if decimal_places is None:
-        float_str = "%f"
-    else:
-        float_str = "%" + ".%df" % decimal_places
-
     lines = ""
-    V, D = verts.shape
-    for i in range(V):
-        vert = [float_str % verts[i, j] for j in range(D)]
-        lines += "v %s\n" % " ".join(vert)
 
-    F, P = faces.shape
-    for i in range(F):
-        face = ["%d" % (faces[i, j] + 1) for j in range(P)]
-        if i + 1 < F:
-            lines += "f %s\n" % " ".join(face)
-        elif i + 1 == F:
-            # No newline at the end of the file.
-            lines += "f %s" % " ".join(face)
+    if len(verts):
+        if decimal_places is None:
+            float_str = "%f"
+        else:
+            float_str = "%" + ".%df" % decimal_places
+
+        V, D = verts.shape
+        for i in range(V):
+            vert = [float_str % verts[i, j] for j in range(D)]
+            lines += "v %s\n" % " ".join(vert)
+
+    if torch.any(faces >= verts.shape[0]) or torch.any(faces < 0):
+        warnings.warn("Faces have invalid indices")
+
+    if len(faces):
+        F, P = faces.shape
+        for i in range(F):
+            face = ["%d" % (faces[i, j] + 1) for j in range(P)]
+            if i + 1 < F:
+                lines += "f %s\n" % " ".join(face)
+            elif i + 1 == F:
+                # No newline at the end of the file.
+                lines += "f %s" % " ".join(face)
 
     f.write(lines)
